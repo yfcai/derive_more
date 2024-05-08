@@ -696,6 +696,10 @@ mod structs {
         #[derive(Pointer)]
         struct UnnamedPointerDerivePointer<'a, E>(&'a E);
 
+        #[derive(Display)]
+        #[display("{_0:p}")]
+        struct UnnamedBox(Box<u32>);
+
         #[test]
         fn assert_no_double_reference() {
             let i: u32 = line!();
@@ -726,6 +730,16 @@ mod structs {
             assert_eq!(
                 format!("{:p}", UnnamedPointerDerivePointer(k)),
                 format!("{:p}", k)
+            );
+        }
+
+        #[test]
+        fn assert_no_double_reference_for_box() {
+            let i: u32 = line!();
+            let unnamed_box = UnnamedBox(Box::new(i));
+            assert_eq!(
+                format!("{}", unnamed_box),
+                format!("{:p}", unnamed_box.0)
             );
         }
     }
