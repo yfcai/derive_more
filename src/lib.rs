@@ -65,6 +65,9 @@ pub mod __private {
 
     #[cfg(feature = "error")]
     pub use crate::vendor::thiserror::aserror::AsDynError;
+
+    #[cfg(feature = "display")]
+    pub use crate::fmt::DisplayRef;
 }
 
 /// Module containing macro definitions only, without corresponding traits.

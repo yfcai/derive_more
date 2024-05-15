@@ -564,8 +564,8 @@ mod structs {
 
             #[derive(Display)]
             #[display(
-                "{_0} {ident} {_1} {} {}",
-                _1, _0 + _1, ident = 123, _1 = _0,
+                "{_0} {ident} {_1} {} {} {} {} {} {}",
+                _1, _0 + _1, _0 + &*_1, &*_0 + _1, _1 + 2, 4 + _0, ident = 123, _1 = _0,
             )]
             struct Tuple(i32, i32);
 
@@ -581,7 +581,7 @@ mod structs {
 
             #[test]
             fn assert() {
-                assert_eq!(Tuple(1, 2).to_string(), "1 123 1 2 3");
+                assert_eq!(Tuple(1, 2).to_string(), "1 123 1 2 3 3 3 4 5");
                 assert_eq!(
                     Struct {
                         field1: 1,

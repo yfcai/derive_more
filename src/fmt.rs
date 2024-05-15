@@ -3,7 +3,13 @@
 
 use ::core;
 use core::fmt::{Debug, Formatter, Result, Write};
+use core::fmt::{Binary, Display, LowerExp, LowerHex, Octal, Pointer, UpperExp, UpperHex};
 use core::prelude::v1::*;
+
+use std::clone::Clone;
+use std::marker::Copy;
+use std::ops;
+use std::ops::*;
 
 /// Same as [`core::fmt::DebugTuple`], but with
 /// [`DebugTuple::finish_non_exhaustive()`] method.
@@ -187,3 +193,150 @@ impl<'a, 'b> Write for Padded<'a, 'b> {
         Ok(())
     }
 }
+
+/// TODO: document
+#[derive(Copy, Clone)]
+pub struct DisplayRef<'a, E>(pub &'a E);
+
+// Forward all Display traits to the underlying type
+
+macro_rules! forward_display_ref_trait {
+    ($($imp:ident)*) => ($(
+        impl<'a, E> $imp for DisplayRef<'a, E> where E: $imp {
+            fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+                $imp::fmt(self.0, f)
+            }
+        }
+    )*)
+}
+
+forward_display_ref_trait! { Binary Debug Display LowerExp LowerHex Octal Pointer UpperExp UpperHex }
+
+/// Enable Deref coercion
+impl<'a, E> ops::Deref for DisplayRef<'a, E> {
+    type Target = E;
+
+    fn deref(&self) -> &'a E {
+        self.0
+    }
+}
+
+// Implement all the traits in std::ops to trigger coersion on operators
+// Except instances containing "where" clauses
+
+// trait Add
+
+macro_rules! forward_display_ref_binop_for_base {
+    (impl $imp:ident, $method:ident for $t:ty, $u:ty) => {
+        impl<'a> $imp<$u> for DisplayRef<'a, $t> {
+            type Output = <$t as $imp<$u>>::Output;
+
+            fn $method(self, other: $u) -> <$t as $imp<$u>>::Output {
+                $imp::$method(*self, other)
+            }
+        }
+
+        impl<'a> $imp<DisplayRef<'a, $u>> for $t {
+            type Output = <$t as $imp<$u>>::Output;
+
+            fn $method(self, other: DisplayRef<'a, $u>) -> <$t as $imp<$u>>::Output {
+                $imp::$method(self, *other)
+            }
+        }
+
+        impl<'a> $imp<DisplayRef<'a, $u>> for DisplayRef<'a, $t> {
+            type Output = <$t as $imp<$u>>::Output;
+
+            fn $method(self, other: DisplayRef<'a, $u>) -> <$t as $imp<$u>>::Output {
+                $imp::$method(*self, *other)
+            }
+        }
+    }
+}
+
+macro_rules! forward_display_ref_binop_for_ref {
+    (impl $imp:ident, $method:ident for $t:ty, $u:ty) => {
+        impl<'a> $imp<&'a $u> for DisplayRef<'a, $t> {
+            type Output = <$t as $imp<$u>>::Output;
+
+            fn $method(self, other: &$u) -> <$t as $imp<$u>>::Output {
+                $imp::$method(*self, *other)
+            }
+        }
+
+        impl<'a> $imp<DisplayRef<'a, $u>> for &'a $t {
+            type Output = <$t as $imp<$u>>::Output;
+
+            fn $method(self, other: DisplayRef<'a, $u>) -> <$t as $imp<$u>>::Output {
+                $imp::$method(*self, *other)
+            }
+        }
+    }
+}
+
+macro_rules! forward_display_ref_binop {
+    (impl $imp:ident, $method:ident for $t:ty, $u:ty) => {
+        forward_display_ref_binop_for_base! { impl $imp, $method for $t, $u }
+        forward_display_ref_binop_for_ref! { impl $imp, $method for $t, $u }
+    }
+}
+
+macro_rules! op_impl {
+    ($imp:ident, $method:ident for $($t:ty)*) => ($(forward_display_ref_binop! { impl $imp, $method for $t, $t })*)
+}
+
+macro_rules! op_impl_fixint {
+    ($imp:ident, $method:ident for $($t:ty)*) => ($(
+        forward_display_ref_binop! { impl $imp, $method for std::num::Saturating<$t>, std::num::Saturating<$t> }
+        forward_display_ref_binop! { impl $imp, $method for std::num::Wrapping<$t>, std::num::Wrapping<$t> }
+    )*)
+}
+
+macro_rules! add_impl_duration {
+    ($($t:ty)*) => ($(
+        forward_display_ref_binop_for_base! { impl Add, add for $t, std::time::Duration }
+    )*)
+}
+
+op_impl! { Add, add for usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 f32 f64 }
+
+op_impl_fixint! { Add, add for usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 }
+
+add_impl_duration! { std::time::Duration std::time::Instant std::time::SystemTime }
+
+// Impossible to forward for DisplayRef:
+// impl<'a> Add for Cow<'a, str>
+// impl<'a> Add<&'a str> for Cow<'a, str>
+
+// impl<T, const N: usize> Add<&Simd<T, N>> for Simd<T, N> // unstable
+
+// trait AddAssign // mutable
+
+// trait AsyncFn // unstable
+// trait AsyncFnMut // unstable
+// trait AsyncFnOnce // unstable
+
+// trait BitAnd
+
+op_impl! { BitAnd, bitand for
+    bool usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128
+    std::net::Ipv4Addr std::net::Ipv6Addr
+}
+
+op_impl_fixint! { BitAnd, bitand for usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 }
+
+// trait BitAndAssign // mutable
+
+// trait BitOr
+
+op_impl! { BitOr, bitor for bool usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 }
+
+op_impl_fixint! { BitOr, bitor for usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 }
+
+// trait BitOrAssign // mutable
+
+// trait BitXor
+
+op_impl! { BitXor, bitxor for bool usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 }
+
+op_impl_fixint! { BitXor, bitxor for usize u8 u16 u32 u64 u128 isize i8 i16 i32 i64 i128 }
